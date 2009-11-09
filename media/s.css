@@ -1,0 +1,9 @@
+.u-form_validation-error_list {
+	background: #f9ccca;
+	border: 1px solid #a00;
+	list-style: none;
+	padding: 1em
+}
+.u-form_validation-field_error {
+	border-color: #a00 !important
+}
