@@ -1,182 +1,86 @@
-(function (u) {
-/*
-	Form validation module for the mandoo JavaScript library
-	Copyright (c) 2009 E. Myller (emyller.net)
-*/
-var
-C = 'u-form_validation-',
-RE = [
-	/^([\w-]+)(?:\((.+)\))?$/,
-	/([#Aa\*])/g
-],
-FRAGMENTS = {
-	'#': '\\d', '*': '.', 'a': '[a-z]', 'A': '[A-Z]'
-},
-PARSE_REPLACE = function (a, m) {
-	return FRAGMENTS[m];
-},
+u.require('effects');
 
-SUBMIT = function (e) {
-	!u(this).validate() && e.preventDefault();
-};
+(function () {
 
-u.mod(
-/* info */{
-	name: 'form_validation',
-	version: .1
-},
+new u.Module("form_validation", { version: .2, hasCSS: !0 },
+// core
+{ FormValidation: u.Class({
+	__init__: function (form, rules, messages, options) {
+		this.form = form;
+		this.fields = u(":input:not(:submit,[type=hidden])");
+		this.rules = {};
+		this.messages = {};
+		for (var i = -1, name; this.fields[++i];) {
+			name = this.fields[i].name || this.fields[i].id;
+			this.rules[name] = [];
+			this.messages[name] = [];
+			if (rules['*']) for (var j = -1, p; rules['*'][++j];)
+				if (!(rules[name] && indexOf(rules[name], rules['*'][j]) !== -1)) {
+					this.rules[name].push(rules['*'][j]);
+					this.messages[name].push(messages['*'][j]); }
+			if (rules[name]) {
+				Array.prototype.push.apply(this.rules[name], rules[name]);
+				Array.prototype.push.apply(this.messages[name], messages[name]); }}
+		var this_ = this;
+		u(form).on('submit', function (e) {
+			!this_.run() && e.preventDefault(); }); },
 
-/* dependencies */
-[
-	// none
-],
+	run: function () {
+		for (var i = -1, valid = !0, errors = {}, name; this.fields[++i];) {
+			name = this.fields[i].name || this.fields[i].id;
+			for (var j = -1, pass; this.rules[name][++j];) {
+				pass = this.rules[name][j].test
+					? this.rules[name][j].test(this.fields[i].value)
+					: this.rules[name][j].call(this.fields[i]);
+				if (pass !== !0) {
+					(errors[name] = errors[name] || []).push(message(this.messages[name][j], pass));
+					valid = !1; }}}
+		return valid; },
 
-/* core */ {
+	$rules: {
+		REQUIRED: /./,
+		EMAIL: /^[\w\d\.-]+@(?:[\w\d-]+\.)+[\w\d-]{2,3}$/,
+		DIGITS: /^(?:\d+)?$/,
+		LETTERS: /^(?:[\D_]+)$/,
+		MATCH: function (field) {
+			return function () {
+				var ref = u("#"+field)[0] || u(":input[name="+field+"]", this.form)[0];
+				return this.value === ref.value
+					|| { value: this.value, expected: ref.value }; }},
+		FORMAT: function (str) {
+			return function () {
+				return !this.value || new RegExp(str.replace(/([#Aa\*])/g, function (a, m) {
+					return ({ '#': "\\d", '*': ".", 'a': "[a-z]", 'A': "[A-Z]" })[m]; }), 'g').test(this.value)
+						|| { value: this.value, expected: str }; }},
+		LENGTH: function (n) {
+			return function () {
+				return this.value.length == n
+					|| { n: this.value.length, expected: n }; }},
+		MIN: function (n) {
+			return function () {
+				return this.value.length >= n
+					|| { n: this.value.length, expected: n }; }},
+		MAX: function (n) {
+			return function () {
+				return this.value.length <= n
+					|| { n: this.value.length, expected: n }; }}}
+})},
 
-FormValidation: u.Class({
-	__rules: {
-		// simple rules
-		required: /./,
-		email: /^[\w\d\.-]+@(?:[\w\d-]+\.)+[\w\d-]{2,3}$/,
-		digits: /^(?:\d+)?$/,
-		letters: /^(?:[a-zA-Z\s-]+)?$/,
-
-		// dynamic rules
-		match: function (field) {
-			return this.val() === u('#'+field).val();
-		},
-		format: function (str) {
-			return !this.val() || new RegExp(str.replace(RE[1], PARSE_REPLACE)).test(this.val());
-		},
-		length: function (n) {
-			return !this.val().length || this.val().length == n;
-		},
-		min: function (n) {
-			return this.val().length >= n;
-		},
-		max: function (n) {
-			return this.val().length <= n;
-		}
-	},
-
-	errors: {},
-	rules: [],
-	filters: [],
-
-	__construct: function (form, rules, options) {
-		this.form = u(u(form)[0]);
-		this.fields = u(':input[type!=submit]', form);
-		this.fieldsIndex = this.form[0].elements;
-
-		this.options = options = u.extend({
-			callbacks: [
-				u.FormValidation.HIGHLIGHT_FIELDS,
-				u.FormValidation.FOCUS_FIRST
-			],
-			filters: {},
-			errorMessages: {}
-		}, options || {});
-
-		this.errors['*'] = {};
-
-		for (var i = -1, id; this.fields[++i];) {
-			id = u(this.fields[i]).attr('id');
-
-			this.rules[id] = [];
-
-			if (rules['*'])
-				this.rules[id] = rules['*'].split(',');
-			if (rules[id])
-				this.rules[id] = this.rules[id].concat(rules[id].split(','));
-
-			options.filters[id] = (options.filters['*'] || []).concat(options.filters[id] || []);
-		}
-
-		this.form[0].validation = this;
-
-		this.form.submit(SUBMIT);
-	},
-
-	// check the form fields
-	validate: function () {
-		for (var i = -1, id, field, allValid = 1; this.fields[++i];) {
-			field = u(this.fields[i]);
-			id = field.attr('id');
-
-			this.errors[id] = [];
-
-			// apply the filters
-			for (var j = -1; this.options.filters[id][++j];)
-				field.val(this.options.filters[id][j](field.val()));
-
-			// check the fields agains the rules
-			for (var j = -1, m, r, valid = 1; this.rules[id][++j];) {
-				m = this.rules[id][j].match(RE[0]);
-				r = u.FormValidation.rules[m[1]];
-
-				// abort if there's not such rule
-				!r && u.error('No such validation rule (' + m[1] + ').');
-
-				valid = m[2] ?
-				// rule with parameter
-					r.call(field, m[2]) :
-				// predefined rule
-					r.test(field.val());
-
-				if (!valid) {
-					allValid = 0;
-					this.errors[id].push(m[1]);
-				}
-			}
-		}
-
-		for (var i = -1; this.options.callbacks[++i];)
-			this.options.callbacks[i].call(this);
-
-		return !!allValid;
-	},
-
-	/* error feedback predefined functions */
-	__HIGHLIGHT_FIELDS: function () {
-		for (var id in this.errors) u(this.fieldsIndex[id])
-			[this.errors[id].length ? 'addClass' : 'rmClass'](C+'field_error');
-	},
-	__FOCUS_FIRST: function () {
-		for (var id in this.errors) if (this.errors[id].length) {
-			u(this.fieldsIndex[id]).highlight()[0].focus();
-			break;
-		}
-	},
-	__SHOW_ERROR_LIST: function () {
-		// clean any error message
-		this.form.first('.'+C+'error_list').remove();
-
-		var c = u.create('ul.'+C+'error_list'), e, msgs;
-
-		for (var id in this.errors)
-		for (var i in this.errors[id]) {
-			msgs = this.options.errorMessages;
-			e = this.errors[id][i];
-
-			c.append('li')
-				.add('strong', u('label[for='+id+']').text())
-				.add('', ' '+(msgs[id] && msgs[id][e] || msgs['*'] && msgs['*'][e] || e));
-			break;
-		}
-
-		e && this.form.prepend(c).slideDown({ speed: 'faster' }).fadeIn();
-	}
-})
-
-},
-
-/* elements methods */ {
+// methods for elements
+{
 	validation: function (rules, options) {
-		return new u.FormValidation(this.filter('form')[0], rules, options);
-	},
-	validate: function () {
-		return this[0].validation && this[0].validation.validate();
-	}
-}
-);
-})(mandoo);
+		for (var i = -1, forms = this.filter("form"); forms[++i];)
+			new u.FormValidation(forms[i], rules, options); }
+});
+
+function indexOf(col, item) {
+	for (var i = 0, l = col.length; i < l; i++)
+		if (col[i] === item)
+			return i;
+	return -1; }
+
+function message(str, info) {
+	return str.replace(/%{(\w+)}/g, function (a, m) {
+		return info[m]; }); }
+
+})()
