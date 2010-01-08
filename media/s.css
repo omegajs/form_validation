@@ -1,9 +1,9 @@
-.u-form_validation-error_list {
+.u-form_validation-messages {
 	background: #f9ccca;
 	border: 1px solid #a00;
 	list-style: none;
-	padding: 1em
-}
+	padding: 1em;
+	overflow: hidden }
+
 .u-form_validation-field_error {
-	border-color: #a00 !important
-}
+	border-color: #a00 !important }
